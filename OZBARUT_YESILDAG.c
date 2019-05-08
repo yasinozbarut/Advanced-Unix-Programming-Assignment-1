@@ -5,7 +5,7 @@
 #include<pthread.h>
 #include<errno.h>
 
-
+struct product *products;
 struct transaction *transactions;
 pthread_mutex_t *mutex = PTHREAD_MUTEX_INITIALIZER;
 //pthread_mutex_t transactionCreationMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -52,7 +52,7 @@ void *customerFunc(void *customer1){
 	int productID = (rand() % (numberOfProducts +1) + 0);
 	int operation = (rand() % (3) + 0);
 	int operationAmount = (rand() % (products[productID].totalProducts/2 + 1) + 0);
-	printf("%d, %d, %d\n", customer->customerID, customer->numberOfOperationsAllowed, customer->numberOfReservableProducts);
+	printf("%d %d %d\n", customer->customerID, customer->numberOfOperationsAllowed, customer->numberOfReservableProducts);
 	//struct transaction trans = {customer->customerID, 1, productID, buy, reserve, cancel};
 } 
 
@@ -62,7 +62,7 @@ int main(int argc, char const *argv[])
 	char line[50];
 	char *token = NULL, *temp[3];
 	int index, i = 0, j = 0;
-	struct product *products;
+	
 	struct seller *sellers;
 	struct customer *customers;
 	pthread_t *sellerThreads;
