@@ -4,6 +4,7 @@
 #include<string.h>
 #include<pthread.h>
 #include<errno.h>
+#include<time.h>
 
 // VISIT: https://deadlockempire.github.io
 
@@ -11,11 +12,14 @@
 // blocked on the specified condition variable cond.
 // To skip next simulation day pthread_cond_broadcast() may be used.
 
+time_t start, end;
+double elapsed = 0;
 struct PRODUCT *products;
 struct TRANSACTION *transactions;
 
-pthread_mutex_t *mutex;
-pthread_cond_t *sendToSeller;
+pthread_mutex_t *mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t sellerFuncMutex = PTHREAD_MUTEX_INITIALIZER, customerFuncMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t *sendToSeller = PTHREAD_COND_INITIALIZER;
 //pthread_mutex_t transactionCreationMutex = PTHREAD_MUTEX_INITIALIZER;
 int counter = 0, numberOfSellers = 0, numberOfCustomers = 0, numberOfProducts = 0, numberOfSimulationDays = 0, totalTransactions = 0;
 int sellerLock = 0;
@@ -47,55 +51,60 @@ struct CUSTOMER {
 };
 
 /** void *sellerFunc: void *seller
- * Bu fonksiyon customerFunc'tan gelen sendToSeller sinyalini sellecLock değişmeden
+ * Bu fonksiyon customerFunc'tan gelen sendToSeller sinyalini sellerLock değişmeden
  * yakalayıp işleme sokuyor. Ayrıca productların sayısını düşürüyor.
  */
-void *sellerFunc(void *seller) {
-    //int sellerID = *((int*) seller); // *((int*)  bunu
-
-    pthread_mutex_lock(&mutex[sellerLock]); // mutex lock
-
-    // https://stackoverflow.com/a/16524820/9052234
-
-    while (true) { // TODO: Make sure that condition is correct for this case
-        if (counter < numberOfSellers) {
-            pthread_cond_wait(&sendToSeller[counter], &mutex[counter]);
-            printf("Signal came to the SELLER: %d\n", counter);
-            counter++;
-        } else {
-            counter = 0;
-            // https://stackoverflow.com/a/16524148/9052234
-        }
-    }//dışarda artması lazım else düşerse artması saçma oluyor
-    pthread_mutex_unlock(&mutex[sellerLock]);
-}
 
 void *customerFunc(void *customer1) {
+	pthread_mutex_lock(&customerFuncMutex);
     struct CUSTOMER *customer = (struct CUSTOMER *) customer1;
-    int productID = (rand() % (numberOfProducts + 1) + 0);
-    int operation = (rand() % (3) + 0);
-    int operationAmount = (rand() % (products[productID].totalProducts / 2 + 1) + 0);
-    //printf("productID: %d operation: %d operationAmount: %d\n", productID, operation, operationAmount);
-
+    
+    
+    while(totalTransactions > 0){
+    	if(sellerLock == (numberOfSellers)){
+    		sellerLock = 0;
+    	}
+    	int productID = (rand() % (numberOfProducts + 1) + 0);
+    	int operation = (rand() % (3) + 0);
+    	int operationAmount = (rand() % (products[productID].totalProducts / 2 + 1) + 0);
+    	printf("productID: %d operation: %d operationAmount: %d\n", productID, operation, operationAmount);
+    	pthread_mutex_lock(&mutex[sellerLock]);
+    	totalTransactions--;
+    	transactions[totalTransactions].customerID = customer->customerID;
+    	transactions[totalTransactions].productID = productID;
+    	transactions[totalTransactions].operation = operation;
+    	transactions[totalTransactions].operationAmount = operationAmount;
+    	pthread_cond_signal(&sendToSeller[sellerLock]);
+    	printf("totalTransactions: %d, sellerLock: %d\n", totalTransactions, sellerLock);
+    	pthread_mutex_unlock(&mutex[sellerLock]);
+    	sleep(1);
+    }
+    pthread_mutex_unlock(&customerFuncMutex);
     /** Incoming customer tries to lock seller if seller is EBUSY customer tries to lock next seller.
     * It goes forward for all sellers until it locks one.
     */
-    while (pthread_mutex_trylock(&mutex[sellerLock]) == EBUSY) { 
-        if (sellerLock < numberOfSellers) {
-            sellerLock++;
-        } else {
-            sellerLock = 0;
-        }
-        //sleep(1);
-    }
-
-    pthread_cond_signal(&sendToSeller[sellerLock]); // https://stackoverflow.com/a/16524820/9052234
-    printf("SELLER %d signalled!!!\n", sellerLock);
-    //printf("sellerLock:%d \n%d %d %d\n", sellerLock, customer->customerID, customer->numberOfOperationsAllowed, customer->numberOfReservableProducts);
-    pthread_mutex_unlock(&mutex[sellerLock]);
+    
     //struct transaction trans = {customer->customerID, 1, productID, buy, reserve, cancel};
 }
 
+void *sellerFunc(void *seller) {
+    //int sellerID = *((int*) seller); // *((int*)  bunu
+	while(true){
+		pthread_mutex_lock(&sellerFuncMutex);
+		if(sellerLock == (numberOfSellers)){
+    		sellerLock = 0;
+    	}
+		pthread_mutex_lock(&mutex[sellerLock]);
+		printf("Waiting for signal: %d\n",sellerLock);
+		pthread_cond_wait(&sendToSeller[sellerLock], &mutex[sellerLock]);
+		printf("Signal came: %d, totalTransactions: %d\n", sellerLock, totalTransactions);
+		products[transactions[totalTransactions].productID].totalProducts -= transactions[totalTransactions].operationAmount;
+		printf("productID: %d, totalProducts: %d\n", transactions[totalTransactions].productID, products[transactions[totalTransactions].productID].totalProducts);
+		pthread_mutex_unlock(&mutex[sellerLock++]);
+		pthread_mutex_unlock(&sellerFuncMutex);
+	}
+    
+}
 
 int main(int argc, char const *argv[]) {
     FILE *file = fopen("input.txt", "r"); // input file
@@ -138,7 +147,7 @@ int main(int argc, char const *argv[]) {
                 products[i - 4].productID = (i - 4);
                 char pr[] = "product";
                 products[i - 4].type = pr;
-                //printf("ID: %d, totalProducts: %d", products[i-4].productID, products[i-4].totalProducts);
+                printf("ID: %d, totalProducts: %d\n", products[i-4].productID, products[i-4].totalProducts);
             } else if (i >= numberOfProducts + 4) {
                 int c = numberOfProducts + 4;
                 customers[i - c].customerID = atoi(token);
