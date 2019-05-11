@@ -5,6 +5,7 @@
 #include<pthread.h>
 #include<errno.h>
 #include<time.h>
+#include<unistd.h>
 
 // VISIT: https://deadlockempire.github.io
 
@@ -59,7 +60,7 @@ void *customerFunc(void *customer1) {
 	//pthread_mutex_lock(&customerFuncMutex);
     struct CUSTOMER *customer = (struct CUSTOMER *) customer1;
     
-    sleep(1);
+    sleep(100);
     while(numberOfSimulationDays > 0 && totalTransactions > 0){
         if(pthread_mutex_trylock(&mutex[sellerLock]) != EBUSY ){
             int productID = (rand() % (numberOfProducts + 1) + 0);
