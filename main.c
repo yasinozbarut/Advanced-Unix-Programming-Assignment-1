@@ -74,7 +74,7 @@ void *customerFunc(void *paramCustomer) {
         //printf("Seller Lock: %d\n",sellerLock);
 
         sleep(1);
-        printf("Try Lock: %d\n", ((&mutex[sellerLock]) != EBUSY));
+
         if(pthread_mutex_trylock(&mutex[sellerLock]) != EBUSY ){
             int productID = (rand() % (numberOfProducts + 1) + 0);
             int operation = (rand() % (3) + 0);
@@ -115,7 +115,6 @@ void *customerFunc(void *paramCustomer) {
 
 void *sellerFunc(void *seller) {
     int sellerID = *((int*) seller);
-    printf("Seller ID: %d\n", sellerID);
 	while(numberOfSimulationDays > 0 ){
 
 		if(pthread_mutex_trylock(&mutex[sellerID]) != EBUSY){
@@ -171,7 +170,9 @@ int main(int argc, char const *argv[]) {
                 products[i - 4].productID = (i - 4);
                 char pr[] = "product";
                 products[i - 4].type = pr;
-                printf("ID: %d, totalProducts: %d\n", products[i-4].productID, products[i-4].totalProducts);
+
+                //printf("Product ID: %d, Total Products: %d\n", products[i-4].productID, products[i-4].totalProducts);
+
             } else if (i >= numberOfProducts + 4) {
                 int c = numberOfProducts + 4;
                 customers[i - c].customerID = atoi(token);
@@ -199,6 +200,10 @@ int main(int argc, char const *argv[]) {
     } // END OF FILE INPUT READ
     //printf("numberOfCustomers: %d, numberOfSellers: %d, numberOfSimulationDays: %d, numberOfProducts: %d\n", numberOfCustomers, numberOfSellers, numberOfSimulationDays, numberOfProducts);
     
+    /*for (size_t i = 0; i < numberOfProducts; i++){
+        printf("Product ID: %d, Total Products: %d\n", products[i].productID, products[i].totalProducts);
+    }*/
+    
     numberOfSimulationDays = 1; // TODO: remove this line to switch next simulation day.
     int seller_index;
 	int customer_index;
@@ -222,21 +227,24 @@ int main(int argc, char const *argv[]) {
     }
 
     transactions = (struct TRANSACTION *) malloc(totalTransactions * sizeof(struct TRANSACTION));
-    printf("numberOfSellers: %d, numberOfCustomers: %d, numberOfSimulationDays: %d, numberOfProducts: %d\n", numberOfSellers, numberOfCustomers, numberOfSimulationDays, numberOfProducts);
+    printf("\nSUMMARY: numberOfSellers: %d, numberOfCustomers: %d, numberOfSimulationDays: %d, numberOfProducts: %d\n\n", numberOfSellers, numberOfCustomers, numberOfSimulationDays, numberOfProducts);
 	// creation of seller threads
     for (seller_index = 0; seller_index < numberOfSellers; seller_index++) {
-        //printf("seller_index: %d\n", seller_index);
+        printf("Seller %d thread created.\n", seller_index);
         rc = pthread_create(&sellerThreads[seller_index], &pthreadAttr, sellerFunc, (void *) &seller_index);
     }
-
+    printf("Seller thread creation is completed.\n");
     // creation of customer threads
     for (customer_index = 0; customer_index < numberOfCustomers; customer_index++) {
+        printf("Customer %d thread created.\n", customer_index);
         rc = pthread_create(&customerThreads[customer_index], &pthreadAttr, customerFunc,
                             (void *) &customers[customer_index]);
     }
-
+    printf("Customer thread creation is completed.\n");
 	// thread joins
-
+    printf("Progress started.\n");
+    sleep(3);
+    system("clear");
     for (customer_index = 0; customer_index < numberOfCustomers; customer_index++) {
         rc = pthread_join(customerThreads[customer_index], NULL);
 
