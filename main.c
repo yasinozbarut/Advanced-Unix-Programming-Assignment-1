@@ -198,7 +198,7 @@ int main(int argc, char const *argv[]) {
     }
 
     transactions = (struct TRANSACTION *) malloc(totalTransactions * sizeof(struct TRANSACTION));
-
+    printf("numberOfSellers: %d, numberOfCustomers: %d, numberOfSimulationDays: %d, numberOfProducts: %d\n", numberOfSellers, numberOfCustomers, numberOfSimulationDays, numberOfProducts);
 	// creation of seller threads
     for (seller_index = 0; seller_index < numberOfSellers; seller_index++) {
         //printf("seller_index: %d\n", seller_index);
