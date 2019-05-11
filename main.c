@@ -19,10 +19,17 @@ struct PRODUCT *products;
 struct TRANSACTION *transactions;
 
 pthread_mutex_t *mutex;
-pthread_mutex_t sellerFuncMutex = PTHREAD_MUTEX_INITIALIZER, customerFuncMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t sellerFuncMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t customerFuncMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t *sendToSeller;
+
 //pthread_mutex_t transactionCreationMutex = PTHREAD_MUTEX_INITIALIZER;
-int counter = 0, numberOfSellers = 0, numberOfCustomers = 0, numberOfProducts = 0, numberOfSimulationDays = 0, totalTransactions = 0;
+int counter = 0;
+int numberOfSellers = 0;
+int numberOfCustomers = 0;
+int numberOfProducts = 0;
+int numberOfSimulationDays = 0;
+int totalTransactions = 0;
 int sellerLock = 0;
 
 struct SELLER {
@@ -56,28 +63,42 @@ struct CUSTOMER {
  * yakalayıp işleme sokuyor. Ayrıca productların sayısını düşürüyor.
  */
 
-void *customerFunc(void *customer1) {
+void *customerFunc(void *paramCustomer) {
 	//pthread_mutex_lock(&customerFuncMutex);
-    struct CUSTOMER *customer = (struct CUSTOMER *) customer1;
+    struct CUSTOMER *customer = (struct CUSTOMER *) paramCustomer;
+    printf("Customer ID: %d\n",customer->customerID);
+    sleep(1);
     
-    sleep(100);
     while(numberOfSimulationDays > 0 && totalTransactions > 0){
+        //printf("Started Customer ID: %d\n",customer->customerID);
+        //printf("Seller Lock: %d\n",sellerLock);
+
+        sleep(1);
+        printf("Try Lock: %d\n", ((&mutex[sellerLock]) != EBUSY));
         if(pthread_mutex_trylock(&mutex[sellerLock]) != EBUSY ){
             int productID = (rand() % (numberOfProducts + 1) + 0);
             int operation = (rand() % (3) + 0);
             int operationAmount = (rand() % (products[productID].totalProducts / 2 + 1) + 0);
-            printf("CUSTOMER\nproductID: %d operation: %d operationAmount: %d\n", productID, operation, operationAmount);
+            printf("Customer ID: %d\nProduct ID: %d - Operation: %d - OperationAmount: %d\n", customer->customerID,productID, operation, operationAmount);
+            
             pthread_mutex_lock(&customerFuncMutex);
-            totalTransactions--;
+            if(totalTransactions>0 && totalTransactions-1>0){
+                totalTransactions--;
+            }
             pthread_mutex_unlock(&customerFuncMutex);
+            
             transactions[totalTransactions].customerID = customer->customerID;
             transactions[totalTransactions].productID = productID;
             transactions[totalTransactions].operation = operation;
             transactions[totalTransactions].operationAmount = operationAmount;
+
             pthread_cond_signal(&sendToSeller[sellerLock]);
+
             printf("Signalling: %d totalTransactions: %d\n\n", sellerLock, totalTransactions);
+
             pthread_mutex_unlock(&mutex[sellerLock++]);
         }
+        
         pthread_mutex_lock(&sellerFuncMutex);
         if(sellerLock == (numberOfSellers-1)){
             sellerLock = 0;
@@ -94,12 +115,13 @@ void *customerFunc(void *customer1) {
 
 void *sellerFunc(void *seller) {
     int sellerID = *((int*) seller);
-    //printf("sellerID: %d\n", sellerID);
-	while(numberOfSimulationDays > 0){
+    printf("Seller ID: %d\n", sellerID);
+	while(numberOfSimulationDays > 0 ){
+
 		if(pthread_mutex_trylock(&mutex[sellerID]) != EBUSY){
-		printf("SELLER\nWaiting for signal: %d\n\n",sellerID);
+		printf("Seller %d waiting for signal.\n\n",sellerID);
 		pthread_cond_wait(&sendToSeller[sellerID], &mutex[sellerID]);
-		printf("Signal came: %d, totalTransactions: %d\n", sellerID, totalTransactions);
+		printf("Signal came to Seller %d, totalTransactions: %d\n", sellerID, totalTransactions);
 		products[transactions[totalTransactions].productID].totalProducts -= transactions[totalTransactions].operationAmount;
 		printf("productID: %d, totalProducts: %d\n\n", transactions[totalTransactions].productID, products[transactions[totalTransactions].productID].totalProducts);
 		pthread_mutex_unlock(&mutex[sellerID]);
@@ -176,7 +198,8 @@ int main(int argc, char const *argv[]) {
 
     } // END OF FILE INPUT READ
     //printf("numberOfCustomers: %d, numberOfSellers: %d, numberOfSimulationDays: %d, numberOfProducts: %d\n", numberOfCustomers, numberOfSellers, numberOfSimulationDays, numberOfProducts);
-
+    
+    numberOfSimulationDays = 1; // TODO: remove this line to switch next simulation day.
     int seller_index;
 	int customer_index;
 	int rc = 0;
