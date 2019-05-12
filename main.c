@@ -28,7 +28,7 @@ int numberOfSellers = 0;
 int numberOfCustomers = 0;
 int numberOfProducts = 0;
 int numberOfSimulationDays = 0;
-int totalTransactions = 0;
+int totalTransactions = 0, constNumberOfTransactions = 0;
 int sellerLock = 0;
 int elapsedTime = 0;
 
@@ -72,6 +72,7 @@ void *timerFunc(){
         elapsedTime = (int)difftime(end, start);    
     } while(elapsedTime < 10);  // run for ten seconds and decrease numberOfSimulationDays
     numberOfSimulationDays -= 1;
+    totalTransactions = constNumberOfTransactions - 1;
     }
     pthread_exit(NULL);
 }
@@ -88,13 +89,13 @@ void *customerFunc(void *paramCustomer) {
 
         
         if (pthread_mutex_trylock(&mutex[sellerLock]) != EBUSY) {
-            int productID = (rand() % (numberOfProducts + 1) + 0);
+            int productID = (rand() % (numberOfProducts) + 0);
             int operation = (rand() % (3) + 0);
-            int operationAmount = (rand() % (productList[productID].totalProducts / 2 + 1) + 0);
+            int operationAmount = (rand() % ((int)(productList[productID].totalProducts / 2) + 1) + 0);
             //printf("CID: %d - PID: %d - OP: %d - Amount: %d\n", customer->customerID, productID, operation, operationAmount);
 
             pthread_mutex_lock(&customerFuncMutex);
-            if (totalTransactions > 0 && totalTransactions - 1 >= 0) {
+            if (totalTransactions > 0) {
                 totalTransactions--;
             }
             pthread_mutex_unlock(&customerFuncMutex);
@@ -104,6 +105,8 @@ void *customerFunc(void *paramCustomer) {
             transactionList[totalTransactions].productID = productID;
             transactionList[totalTransactions].operation = operation;
             transactionList[totalTransactions].operationAmount = operationAmount;
+            //printf("SIGNALLING: %d\n", sellerLock);
+            pthread_cond_signal(&sendToSeller[sellerLock]);
             printf("Sim Day: %d -",numberOfSimulationDays);
             printf("TID: %d - CID: %d - PID: %d - OP: %d - OP Amount: %d - P Amount: %d\n", 
                 transactionList[totalTransactions].transcationID,
@@ -113,17 +116,17 @@ void *customerFunc(void *paramCustomer) {
                 transactionList[totalTransactions].operationAmount,
                 productList[transactionList[totalTransactions].productID].totalProducts);
 
-            pthread_cond_signal(&sendToSeller[sellerLock]);
-
             //printf("Signalling: %d totalTransactions: %d\n\n", sellerLock, totalTransactions);
 
-            pthread_mutex_unlock(&mutex[sellerLock++]);
+            pthread_mutex_unlock(&mutex[sellerLock]);
         }
 
         pthread_mutex_lock(&sellerFuncMutex);
         if (sellerLock == (numberOfSellers - 1)) {
             sellerLock = 0;
             sleep(1);
+        }else{
+            sellerLock++;
         }
         pthread_mutex_unlock(&sellerFuncMutex);
         //sleep(1);
@@ -137,12 +140,12 @@ void *customerFunc(void *paramCustomer) {
 }
 //0 -> buy  1 -> reserve  2 -> cancel
 void *sellerFunc(void *seller) {
-    int sellerID = *((int *) seller);
+    int sellerID = *((int *) seller) - 1;
     printf("\nSim Day: %d Seller: %d\n",numberOfSimulationDays,sellerID);
     while (numberOfSimulationDays > 0) {
 
-        if (pthread_mutex_trylock(&mutex[sellerID]) != EBUSY) {
-            //printf("Seller %d waiting for signal.\n\n", sellerID);
+        if (pthread_mutex_trylock(&mutex[sellerID]) != EBUSY && totalTransactions >= 0) {
+            printf("Seller %d waiting for signal.\n", sellerID);
             pthread_cond_wait(&sendToSeller[sellerID], &mutex[sellerID]);
             printf("Signal came to Seller %d, totalTransactions: %d\n", sellerID, totalTransactions);
             pthread_mutex_lock(&operationMutex);
@@ -155,9 +158,6 @@ void *sellerFunc(void *seller) {
             pthread_mutex_unlock(&operationMutex);
             /*printf("PID: %d, Amount: %d\n", transactionList[totalTransactions].productID,
                    productList[transactionList[totalTransactions].productID].totalProducts);*/
-            
-
-
             pthread_mutex_unlock(&mutex[sellerID]);
         }
        
@@ -246,6 +246,8 @@ int main(int argc, char const *argv[]) {
     int seller_index;
     int customer_index;
     int rc = 0;
+
+    constNumberOfTransactions = totalTransactions;
 
     pthread_t customerThreads[numberOfCustomers], timerThread;
     pthread_attr_t pthreadAttr;
