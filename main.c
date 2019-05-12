@@ -65,14 +65,14 @@ struct CUSTOMER {
     char *type;
 };
 
-void log(){
+void logger(){
     FILE *output ;
             output = fopen("output.txt", "w+");
             if (!output) {
                 fprintf(output, "Error opening output.txt for writing.\n");
                 return;
             }
-            fprintf("Sim Day: %d - TID: %d - CID: %d - PID: %d - OP: %d - OP Amount: %d - P Amount: %d\n",
+            fprintf(output,"Sim Day: %d - TID: %d - CID: %d - PID: %d - OP: %d - OP Amount: %d - P Amount: %d\n",
                    numberOfSimulationDays,
                    transactionList[totalTransactions].transcationID,
                    transactionList[totalTransactions].customerID,
@@ -120,7 +120,6 @@ void *customerFunc(void *paramCustomer) {
             // create transaction in list
             transactionList[totalTransactions].transcationID = TRANSCATION_ID;
             transactionList[totalTransactions].customerID = customer->customerID;
-            // TODO: add sellerID 
             transactionList[totalTransactions].productID = productID;
             transactionList[totalTransactions].operation = operation;
             transactionList[totalTransactions].operationAmount = operationAmount;
@@ -157,8 +156,7 @@ void *sellerFunc(void *seller) {
     while (numberOfSimulationDays > 0) {
         if (pthread_mutex_trylock(&mutex[sellerID]) != EBUSY && totalTransactions >= 0) { // locks seller
             pthread_cond_wait(&sendToSeller[sellerID], &mutex[sellerID]);// gets signal to seller
-            log();
-            // TODO: add sellerID
+            logger();
             transactionList[totalTransactions].sellerID = sellerID;
             pthread_mutex_lock(&operationMutex); // locks for product stocks
             int operation = transactionList[totalTransactions].operation;
