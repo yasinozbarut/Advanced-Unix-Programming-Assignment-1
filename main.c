@@ -94,7 +94,7 @@ void *customerFunc(void *paramCustomer) {
             //printf("CID: %d - PID: %d - OP: %d - Amount: %d\n", customer->customerID, productID, operation, operationAmount);
 
             pthread_mutex_lock(&customerFuncMutex);
-            if (totalTransactions > 0 && totalTransactions - 1 > 0) {
+            if (totalTransactions > 0 && totalTransactions - 1 >= 0) {
                 totalTransactions--;
             }
             pthread_mutex_unlock(&customerFuncMutex);
