@@ -14,7 +14,6 @@
 // To skip next simulation day pthread_cond_broadcast() may be used.
 int TRANSCATION_ID = 0;
 time_t start, end;
-double elapsed = 0;
 struct PRODUCT *productList;
 struct TRANSACTION *transactionList;
 
@@ -22,8 +21,8 @@ pthread_mutex_t *mutex;
 pthread_mutex_t sellerFuncMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t customerFuncMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t *sendToSeller;
-
-//pthread_mutex_t transactionCreationMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t timerMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t operationMutex = PTHREAD_MUTEX_INITIALIZER;
 int counter = 0;
 int numberOfSellers = 0;
 int numberOfCustomers = 0;
@@ -31,6 +30,7 @@ int numberOfProducts = 0;
 int numberOfSimulationDays = 0;
 int totalTransactions = 0;
 int sellerLock = 0;
+int elapsedTime = 0;
 
 struct SELLER {
     int sellerID;
@@ -64,18 +64,29 @@ struct CUSTOMER {
  * yakalayıp işleme sokuyor. Ayrıca productların sayısını düşürüyor.
  */
 
+void *timerFunc(){
+    while(numberOfSimulationDays > 0){
+    time(&start);  // start the timer 
+    do {
+        time(&end);
+        elapsedTime = (int)difftime(end, start);    
+    } while(elapsedTime < 10);  // run for ten seconds and decrease numberOfSimulationDays
+    numberOfSimulationDays -= 1;
+    }
+    pthread_exit(NULL);
+}
+
 void *customerFunc(void *paramCustomer) {
     //pthread_mutex_lock(&customerFuncMutex);
     struct CUSTOMER *customer = (struct CUSTOMER *) paramCustomer;
     //printf("Customer ID: %d\n", customer->customerID);
     sleep(1);
 
-    while (numberOfSimulationDays > 0 && totalTransactions > 0) {
+    while (numberOfSimulationDays > 0) {
         //printf("Started Customer ID: %d\n",customer->customerID);
         //printf("Seller Lock: %d\n",sellerLock);
 
-        sleep(1);
-
+        
         if (pthread_mutex_trylock(&mutex[sellerLock]) != EBUSY) {
             int productID = (rand() % (numberOfProducts + 1) + 0);
             int operation = (rand() % (3) + 0);
@@ -88,7 +99,7 @@ void *customerFunc(void *paramCustomer) {
             }
             pthread_mutex_unlock(&customerFuncMutex);
             TRANSCATION_ID++;
-            transactionList[totalTransactions].transcationID=TRANSCATION_ID;
+            transactionList[totalTransactions].transcationID = TRANSCATION_ID;
             transactionList[totalTransactions].customerID = customer->customerID;
             transactionList[totalTransactions].productID = productID;
             transactionList[totalTransactions].operation = operation;
@@ -112,8 +123,10 @@ void *customerFunc(void *paramCustomer) {
         pthread_mutex_lock(&sellerFuncMutex);
         if (sellerLock == (numberOfSellers - 1)) {
             sellerLock = 0;
+            sleep(1);
         }
         pthread_mutex_unlock(&sellerFuncMutex);
+        //sleep(1);
     }
     //pthread_mutex_unlock(&customerFuncMutex);
     /** Incoming customer tries to lock seller if seller is EBUSY customer tries to lock next seller.
@@ -122,7 +135,7 @@ void *customerFunc(void *paramCustomer) {
     pthread_exit(NULL);
     //struct transaction trans = {customer->customerID, 1, productID, buy, reserve, cancel};
 }
-
+//0 -> buy  1 -> reserve  2 -> cancel
 void *sellerFunc(void *seller) {
     int sellerID = *((int *) seller);
     printf("\nSim Day: %d Seller: %d\n",numberOfSimulationDays,sellerID);
@@ -131,8 +144,15 @@ void *sellerFunc(void *seller) {
         if (pthread_mutex_trylock(&mutex[sellerID]) != EBUSY) {
             //printf("Seller %d waiting for signal.\n\n", sellerID);
             pthread_cond_wait(&sendToSeller[sellerID], &mutex[sellerID]);
-            //printf("Signal came to Seller %d, totalTransactions: %d\n", sellerID, totalTransactions);
-            productList[transactionList[totalTransactions].productID].totalProducts -= transactionList[totalTransactions].operationAmount;
+            printf("Signal came to Seller %d, totalTransactions: %d\n", sellerID, totalTransactions);
+            pthread_mutex_lock(&operationMutex);
+            int operation = transactionList[totalTransactions].operation;
+            if(operation == 0 || operation == 1){
+                productList[transactionList[totalTransactions].productID].totalProducts -= transactionList[totalTransactions].operationAmount;
+            }else if(operation == 2){
+                productList[transactionList[totalTransactions].productID].totalProducts += transactionList[totalTransactions].operationAmount;
+            }
+            pthread_mutex_unlock(&operationMutex);
             /*printf("PID: %d, Amount: %d\n", transactionList[totalTransactions].productID,
                    productList[transactionList[totalTransactions].productID].totalProducts);*/
             
@@ -173,6 +193,7 @@ int main(int argc, char const *argv[]) {
                         sellerThreads = (pthread_t *) malloc(numberOfSellers * sizeof(pthread_t));
                     } else if (!strcmp("days", temp[index])) {
                         numberOfSimulationDays = atoi(token);
+                        //printf("numberOfSimulationDays: %d\n", numberOfSimulationDays);
                     } else if (!strcmp("products", temp[index])) {
                         numberOfProducts = atoi(token);
                         productList = (struct PRODUCT *) malloc(numberOfProducts * sizeof(struct PRODUCT));
@@ -220,14 +241,13 @@ int main(int argc, char const *argv[]) {
         printf("Product ID: %d, Total Products: %d\n", products[i].productID, products[i].totalProducts);
     }*/
 
-    numberOfSimulationDays = 1; // TODO: remove this line to switch next simulation day.
+    //numberOfSimulationDays = 1; // TODO: remove this line to switch next simulation day.
     //numberOfSimulationDays++;
     int seller_index;
     int customer_index;
     int rc = 0;
 
-
-    pthread_t customerThreads[numberOfCustomers];
+    pthread_t customerThreads[numberOfCustomers], timerThread;
     pthread_attr_t pthreadAttr;
     pthread_attr_init(&pthreadAttr);
     pthread_attr_setdetachstate(&pthreadAttr, PTHREAD_CREATE_JOINABLE);
@@ -243,14 +263,21 @@ int main(int argc, char const *argv[]) {
         pthread_cond_init(&sendToSeller[mutexInitializer], NULL);
     }
 
+    //timer thread created
+    pthread_create(&timerThread, NULL, timerFunc, NULL);
+
     transactionList = (struct TRANSACTION *) malloc(totalTransactions * sizeof(struct TRANSACTION));
     //printf("\nSUMMARY: numberOfSellers: %d, numberOfCustomers: %d, numberOfSimulationDays: %d, numberOfProducts: %d\n\n",
     //       numberOfSellers, numberOfCustomers, numberOfSimulationDays, numberOfProducts);
+    printf("Progress started.\n");
     // creation of seller threads
     for (seller_index = 0; seller_index < numberOfSellers; seller_index++) {
         //printf("Seller %d thread created.\n", seller_index);
         rc = pthread_create(&sellerThreads[seller_index], &pthreadAttr, sellerFunc, (void *) &seller_index);
     }
+
+    //time(&start);  /* start the timer */
+
     //printf("Seller thread creation is completed.\n");
     // creation of customer threads
     for (customer_index = 0; customer_index < numberOfCustomers; customer_index++) {
@@ -260,11 +287,19 @@ int main(int argc, char const *argv[]) {
     }
     //printf("Customer thread creation is completed.\n");
     
-    printf("Progress started.\n");
     
-    //system("clear");
+    /*
+    time(&start);  // start the timer 
+    do {
+        time(&end);
+        elapsedTime = (int)difftime(end, start);  
+        if((elapsedTime % 10) == 0){
+            numberOfSimulationDays -= 1;
+        }     
+    } while((elapsedTime % 10) == 0 && numberOfSimulationDays > 0);  // run for ten seconds and decrease numberOfSimulationDays
+    */
+
     
-    sleep(10);
     // thread joins
     for (customer_index = 0; customer_index < numberOfCustomers; customer_index++) {
         rc = pthread_join(customerThreads[customer_index], NULL);
