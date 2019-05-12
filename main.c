@@ -37,6 +37,7 @@ struct CUSTOMER *customers;
 
 struct SELLER {
     int sellerID;
+    int sellerTransactionCount;
     char *type;
 };
 
@@ -60,6 +61,7 @@ struct CUSTOMER {
     int customerID;
     int numberOfReservableProducts;
     int numberOfOperationsAllowed;
+    int customerTransactionCount;
     char *type;
 };
 
@@ -67,8 +69,8 @@ void log(){
     FILE *output ;
             output = fopen("output.txt", "w+");
             if (!output) {
-                fprintf(stderr, "Error opening output.txt for writing.\n");
-                return 1;
+                fprintf(output, "Error opening output.txt for writing.\n");
+                return;
             }
             fprintf("Sim Day: %d - TID: %d - CID: %d - PID: %d - OP: %d - OP Amount: %d - P Amount: %d\n",
                    numberOfSimulationDays,
