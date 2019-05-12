@@ -138,10 +138,13 @@ void *sellerFunc(void *seller) {
     while (numberOfSimulationDays > 0) {
         if (pthread_mutex_trylock(&mutex[sellerID]) != EBUSY && totalTransactions >= 0) { // locks seller
             pthread_cond_wait(&sendToSeller[sellerID], &mutex[sellerID]);// gets signal to seller
-            
+            // TODO: add sellerID
+            transactionList[totalTransactions].sellerID = sellerID;
             pthread_mutex_lock(&operationMutex); // locks for product stocks
             int operation = transactionList[totalTransactions].operation;
-            if (operation == 0 || operation == 1) { // buy and reserve decreases stock.
+            if ((operation == 0 || operation == 1) 
+                && productList[transactionList[totalTransactions].productID].totalProducts >= 
+                transactionList[totalTransactions].operationAmount) { // buy and reserve decreases stock.
                 productList[transactionList[totalTransactions].productID].totalProducts -= transactionList[totalTransactions].operationAmount;
             } else if (operation == 2) { // cancel increases product stock
                 productList[transactionList[totalTransactions].productID].totalProducts += transactionList[totalTransactions].operationAmount;
